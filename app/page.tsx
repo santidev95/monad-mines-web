@@ -1,15 +1,15 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-// Imports do Wagmi (Para a carteira principal)
+// Wagmi imports (For main wallet)
 import { useAccount, useConnect, useWriteContract, useSwitchChain } from 'wagmi'
 import { parseEther, formatEther, createWalletClient, http, publicActions, decodeEventLog, createPublicClient, type Hex, type PrivateKeyAccount, toHex } from 'viem'
 import { keccak256 } from 'viem'
 import { usePublicClient } from 'wagmi'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
-// Import da Chain e ABI
-import { monadTestnet } from '@/utils/chains'
-// Import das funções do contrato
+// Chain and ABI imports
+import { monadTestnet } from 'viem/chains'
+// Contract function imports
 import {
   getSessionDelegate,
   getGameInfo,
@@ -25,7 +25,7 @@ import {
   CONTRACT_ABI
 } from '@/utils/contract'
 
-// Tipos
+// Types
 type GameState = {
   id: bigint | null;
   pot: string;
@@ -36,7 +36,7 @@ type GameState = {
   nonceRevealed: boolean;
 };
 
-// Tipo para window.ethereum
+// Type for window.ethereum
 declare global {
   interface Window {
     ethereum?: {
@@ -53,34 +53,35 @@ export default function Home() {
   const { address, isConnected, chainId } = useAccount()
   const { connect, connectors } = useConnect()
   const { switchChain } = useSwitchChain()
-  const { writeContractAsync } = useWriteContract() // Substituto moderno do signer.sendTransaction
+  const { writeContractAsync } = useWriteContract() // Modern replacement for signer.sendTransaction
   const wagmiPublicClient = usePublicClient()
 
   // --- VIEM (Session Key / Burner Wallet) ---
-  // A Burner Wallet não usa hooks do Wagmi, pois não queremos conectá-la na UI global
+  // Burner Wallet doesn't use Wagmi hooks, as we don't want to connect it in the global UI
   const [burnerAccount, setBurnerAccount] = useState<PrivateKeyAccount | null>(null)
   const [burnerBalance, setBurnerBalance] = useState<string>("0")
   const [isSessionActive, setIsSessionActive] = useState(false)
   
-  // Estados para popup de abastecimento
+  // Top-up modal states
   const [showTopUpModal, setShowTopUpModal] = useState(false)
   const [topUpAmount, setTopUpAmount] = useState<string>("0.05")
   const [mainBalance, setMainBalance] = useState<string>("0")
   
-  // Estados para popup de withdraw
+  // Withdraw modal states
   const [showWithdrawModal, setShowWithdrawModal] = useState(false)
   const [withdrawAmount, setWithdrawAmount] = useState<string>("0")
   const [estimatedGas, setEstimatedGas] = useState<string>("0.001")
   const [isWithdrawing, setIsWithdrawing] = useState(false)
+  const [withdrawError, setWithdrawError] = useState<string | null>(null)
 
-  // Cliente Viem para a Burner Wallet (Para ler e escrever)
-  // publicActions permite usar esse cliente para ler dados também (getBalance, readContract)
+  // Viem client for Burner Wallet (For reading and writing)
+  // publicActions allows using this client to read data as well (getBalance, readContract)
   const burnerClient = useRef<BurnerClient | null>(null)
   const eventUnwatchRef = useRef<(() => void) | null>(null)
   const balanceIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Estado do Jogo
+  // Game State
   const [game, setGame] = useState<GameState>({
     id: null, pot: "0", isActive: false, status: "idle", revealedMask: 0n, revealedCount: 0, nonceRevealed: false
   })
@@ -91,10 +92,10 @@ export default function Home() {
   const [lostPot, setLostPot] = useState<string>("0")
   const [showHowToPlayModal, setShowHowToPlayModal] = useState(false)
   
-  // Estado para o nonce do commit-reveal
+  // State for commit-reveal nonce
   const [currentNonce, setCurrentNonce] = useState<Hex | null>(null)
   
-  // Multiplicador fixo de 1.2x por acerto
+  // Fixed multiplier of 1.2x per hit
   const currentMultiplier = "1.20"
   const [logs, setLogs] = useState<string[]>([])
   const logsEndRef = useRef<HTMLDivElement>(null)
@@ -106,7 +107,7 @@ export default function Home() {
       const bal = await burnerClient.current.getBalance({ address: burnerAccount.address })
       setBurnerBalance(formatEther(bal))
     } catch (e) {
-      console.error('Erro ao atualizar saldo:', e)
+      console.error('Error updating balance:', e)
     }
   }, [burnerAccount])
 
@@ -120,11 +121,11 @@ export default function Home() {
       const bal = await publicClient.getBalance({ address })
       setMainBalance(formatEther(bal))
     } catch (e) {
-      console.error('Erro ao atualizar saldo principal:', e)
+      console.error('Error updating main balance:', e)
     }
   }, [address, wagmiPublicClient, chain])
 
-  // 1. SETUP INICIAL (Cria Burner Wallet)
+  // 1. INITIAL SETUP (Creates Burner Wallet)
   useEffect(() => {
     let pKey = localStorage.getItem("monad_session_key") as Hex | null
     if (!pKey) {
@@ -132,35 +133,35 @@ export default function Home() {
       localStorage.setItem("monad_session_key", pKey)
     }
     
-    // Configura a conta Viem
+    // Configures the Viem account
     const account = privateKeyToAccount(pKey)
     setBurnerAccount(account)
 
-    // Cria o cliente que vai assinar as transações rápidas
+    // Creates the client that will sign fast transactions
     const client = createWalletClient({
       account,
       chain: chain,
       transport: http()
     }).extend(publicActions)
-    burnerClient.current = client as unknown as BurnerClient // Adiciona métodos de leitura
+    burnerClient.current = client as unknown as BurnerClient // Adds read methods
 
-    // Limpa intervalo anterior se existir
+    // Clears previous interval if it exists
     if (balanceIntervalRef.current) {
       clearInterval(balanceIntervalRef.current)
     }
 
-    // Função para atualizar saldo (definida localmente para evitar dependência)
+    // Function to update balance (defined locally to avoid dependency)
     const updateBalance = async () => {
       if (!burnerClient.current || !account) return
       try {
         const bal = await burnerClient.current.getBalance({ address: account.address })
         setBurnerBalance(formatEther(bal))
       } catch (e) {
-        console.error('Erro ao atualizar saldo:', e)
+        console.error('Error updating balance:', e)
       }
     }
 
-    // Inicia polling de saldo da Burner (a cada 10 segundos para reduzir carga)
+    // Starts polling Burner balance (every 10 seconds to reduce load)
     updateBalance()
     balanceIntervalRef.current = setInterval(updateBalance, 10000)
     
@@ -174,16 +175,16 @@ export default function Home() {
         timeoutRef.current = null
       }
     }
-  }, [chain]) // Executa apenas uma vez na montagem do componente
+  }, [chain]) // Runs only once on component mount
 
-  // Efeito separado para atualizar saldo quando a conta mudar
+  // Separate effect to update balance when account changes
   useEffect(() => {
     if (burnerAccount && burnerClient.current) {
       updateBurnerBalance()
     }
   }, [burnerAccount, updateBurnerBalance])
 
-  // Verifica se está na chain certa
+  // Checks if on the correct chain
   useEffect(() => {
     if (isConnected && chainId !== chain.id) {
         switchChain({ chainId: chain.id })
@@ -193,30 +194,30 @@ export default function Home() {
   const checkAuthorization = useCallback(async () => {
     if (!burnerClient.current || !burnerAccount || !address) return
     try {
-        // burnerClient.current tem publicActions, então pode ser usado como PublicClient
+        // burnerClient.current has publicActions, so it can be used as PublicClient
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const delegate = await getSessionDelegate(burnerClient.current as any, burnerAccount.address)
         setIsSessionActive(delegate.toLowerCase() === address.toLowerCase())
     } catch (e) { console.error(e) }
   }, [burnerAccount, address])
 
-  // Verifica se a Session Key está autorizada no contrato
+  // Checks if Session Key is authorized in the contract
   useEffect(() => {
     if (address && burnerAccount && burnerClient.current) {
         checkAuthorization()
     }
   }, [address, burnerAccount, checkAuthorization])
 
-  // Atualiza saldo da wallet principal quando conectar ou mudar endereço
+  // Updates main wallet balance when connecting or changing address
   useEffect(() => {
     if (address && wagmiPublicClient) {
       updateMainBalance()
-      const interval = setInterval(updateMainBalance, 10000) // Atualiza a cada 10 segundos
+      const interval = setInterval(updateMainBalance, 10000) // Updates every 10 seconds
       return () => clearInterval(interval)
     }
   }, [address, wagmiPublicClient, updateMainBalance])
 
-  // Atualiza saldo quando abrir o modal
+  // Updates balance when opening modal
   useEffect(() => {
     if (showTopUpModal && address) {
       updateMainBalance()
@@ -226,24 +227,25 @@ export default function Home() {
   const addLog = (msg: string) => {
     setLogs(prev => {
       const newLogs = [`> ${msg}`, ...prev]
-      // Limita a 100 logs para evitar consumo excessivo de memória
+      // Limits to 100 logs to avoid excessive memory consumption
       return newLogs.slice(0, 100)
     })
   }
 
   // ---------------- ACTIONS ----------------
 
-  // A. Abrir modal de abastecimento
+  // A. Open top-up modal
   const openTopUpModal = () => {
     setShowTopUpModal(true)
     setTopUpAmount("0.05")
   }
 
-  // A2. Abrir modal de withdraw e calcular gas
+  // A2. Open withdraw modal and calculate gas
   const openWithdrawModal = async () => {
     setShowWithdrawModal(true)
+    setWithdrawError(null) // Clears previous errors when opening modal
     
-    // Calcula o gas estimado para a transação
+    // Calculates estimated gas for the transaction
     if (address && burnerAccount && burnerClient.current) {
       try {
         const publicClient = wagmiPublicClient || createPublicClient({
@@ -251,30 +253,30 @@ export default function Home() {
           transport: http()
         })
         
-        // Estima o gas para uma transação simples de transferência
+        // Estimates gas for a simple transfer transaction
         const gasEstimate = await publicClient.estimateGas({
           account: burnerAccount,
           to: address,
-          value: parseEther("0.001") // Valor mínimo para estimar
+          value: parseEther("0.001") // Minimum value to estimate
         })
         
-        // Obtém o gas price atual
+        // Gets current gas price
         const gasPrice = await publicClient.getGasPrice()
         
-        // Calcula o custo total do gas
+        // Calculates total gas cost
         const gasCost = gasEstimate * gasPrice
         const gasCostInEther = formatEther(gasCost)
         
-        // Adiciona uma margem de segurança de 20%
+        // Adds a 20% safety margin
         const gasWithMargin = parseFloat(gasCostInEther) * 1.2
         setEstimatedGas(gasWithMargin.toFixed(6))
         
-        // Define o valor inicial como saldo menos gas
+        // Sets initial value as balance minus gas
         const maxWithdraw = Math.max(0, parseFloat(burnerBalance) - gasWithMargin)
         setWithdrawAmount(maxWithdraw > 0 ? maxWithdraw.toFixed(6) : "0")
       } catch (e) {
-        console.error('Erro ao calcular gas:', e)
-        // Fallback para valor fixo se houver erro
+        console.error('Error calculating gas:', e)
+        // Fallback to fixed value if there's an error
         setEstimatedGas("0.001")
         const maxWithdraw = Math.max(0, parseFloat(burnerBalance) - 0.001)
         setWithdrawAmount(maxWithdraw > 0 ? maxWithdraw.toFixed(6) : "0")
@@ -285,13 +287,18 @@ export default function Home() {
     }
   }
 
-  // A3. Retirar (Withdraw) - Usa Burner Wallet para enviar de volta para Main Wallet
+  // A3. Withdraw - Uses Burner Wallet to send back to Main Wallet
   const handleWithdraw = async () => {
     if (!address || !burnerAccount || !burnerClient.current || isWithdrawing) return
     
+    // Clears previous errors
+    setWithdrawError(null)
+    
     const amount = parseFloat(withdrawAmount)
     if (isNaN(amount) || amount <= 0) {
-      addLog("❌ Invalid value!")
+      const errorMsg = "❌ Invalid value!"
+      addLog(errorMsg)
+      setWithdrawError(errorMsg)
       return
     }
 
@@ -299,14 +306,18 @@ export default function Home() {
     const gasCost = parseFloat(estimatedGas)
     
     if (amount > burnerBal) {
-      addLog("❌ Insufficient balance in burner account!")
+      const errorMsg = "❌ Insufficient balance in burner account!"
+      addLog(errorMsg)
+      setWithdrawError(errorMsg)
       return
     }
 
-    // Verifica se há saldo suficiente incluindo o gas
+    // Checks if there's sufficient balance including gas
     if (amount + gasCost > burnerBal) {
       const maxAmount = Math.max(0, burnerBal - gasCost)
-      addLog(`⚠️ Insufficient balance including gas. Maximum available: ${maxAmount.toFixed(6)} MON`)
+      const errorMsg = `⚠️ Insufficient balance including gas. Maximum available: ${maxAmount.toFixed(6)} MON`
+      addLog(errorMsg)
+      setWithdrawError(errorMsg)
       setWithdrawAmount(maxAmount.toFixed(6))
       return
     }
@@ -315,9 +326,9 @@ export default function Home() {
     try {
         addLog(`Withdrawing ${withdrawAmount} MON to main wallet...`)
         
-        // Usa a burner account para enviar MON de volta para a wallet principal
-        // O burnerClient já tem a account configurada no createWalletClient
-        // @ts-expect-error - O account já está configurado no client, não precisa passar novamente
+        // Uses burner account to send MON back to main wallet
+        // burnerClient already has the account configured in createWalletClient
+        // @ts-expect-error - Account is already configured in client, doesn't need to be passed again
         const hash = await burnerClient.current.sendTransaction({
             to: address as `0x${string}`,
             value: parseEther(withdrawAmount)
@@ -326,12 +337,14 @@ export default function Home() {
         addLog(`Withdraw sent! Hash: ${hash.slice(0, 10)}...`)
         addLog("⏳ Waiting for confirmation...")
         
-        // Aguarda confirmação da transação
+        // Waits for transaction confirmation
         const receipt = await burnerClient.current.waitForTransactionReceipt({ hash })
         
-        // Verifica se a transação foi bem-sucedida
+        // Checks if transaction was successful
         if (receipt.status !== 'success') {
-          addLog("❌ Withdraw transaction failed!")
+          const errorMsg = "❌ Withdraw transaction failed!"
+          addLog(errorMsg)
+          setWithdrawError(errorMsg)
           setIsWithdrawing(false)
           return
         }
@@ -339,31 +352,46 @@ export default function Home() {
         addLog(`✅ Withdraw confirmed at block: ${receipt.blockNumber}`)
         addLog("💰 Funds transferred to main wallet!")
         
-        // Fecha o modal
+        // Clears errors before closing
+        setWithdrawError(null)
+        
+        // Closes modal
         setShowWithdrawModal(false)
         setIsWithdrawing(false)
         
-        // Atualiza os saldos imediatamente
+        // Updates balances immediately
         await updateBurnerBalance()
         await updateMainBalance()
         
-        // Limpa timeout anterior se existir
+        // Clears previous timeout if it exists
         if (timeoutRef.current) {
           clearTimeout(timeoutRef.current)
         }
-        // Atualiza novamente após um delay para garantir sincronização
+        // Updates again after a delay to ensure synchronization
         timeoutRef.current = setTimeout(() => {
           updateBurnerBalance()
           updateMainBalance()
         }, 2000)
     } catch (e: unknown) { 
         const error = e as { message?: string }
-        addLog("❌ Withdraw Error: " + (error.message || String(e)))
+        let errorMsg = "❌ Withdraw error: " + (error.message || String(e))
+        
+        // Translates common error messages
+        if (error.message?.includes("insufficient funds")) {
+          errorMsg = "❌ Insufficient balance to cover gas!"
+        } else if (error.message?.includes("user rejected") || error.message?.includes("User rejected")) {
+          errorMsg = "❌ Transaction cancelled by user"
+        } else if (error.message?.includes("execution reverted")) {
+          errorMsg = "❌ Transaction reverted by contract"
+        }
+        
+        addLog(errorMsg)
+        setWithdrawError(errorMsg)
         setIsWithdrawing(false)
     }
   }
 
-  // A. Abastecer (Usa Main Wallet via Wagmi)
+  // A. Top Up (Uses Main Wallet via Wagmi)
   const handleTopUp = async () => {
     if (!address || !burnerAccount || !window.ethereum) return
     
@@ -391,10 +419,10 @@ export default function Home() {
         }) as string
         addLog(`TopUp sent! Hash: ${hash.slice(0, 10)}...`)
         
-        // Fecha o modal
+        // Closes modal
         setShowTopUpModal(false)
         
-        // Limpa timeout anterior se existir
+        // Clears previous timeout if it exists
         if (timeoutRef.current) {
           clearTimeout(timeoutRef.current)
         }
@@ -408,7 +436,7 @@ export default function Home() {
     }
   }
 
-  // B. Autorizar Sessão (Usa Main Wallet via Wagmi)
+  // B. Authorize Session (Uses Main Wallet via Wagmi)
   const activateSession = async () => {
     if (!burnerAccount || !address) return
     try {
@@ -422,7 +450,7 @@ export default function Home() {
         addLog(`Tx sent. Hash: ${hash.slice(0, 10)}...`)
         addLog("⏳ Waiting for confirmation...")
         
-        // Polling manual para verificar o status da transação
+        // Manual polling to check transaction status
         let receipt = null
         let attempts = 0
         const maxAttempts = 30 // 30 tentativas = ~30 segundos
@@ -433,7 +461,7 @@ export default function Home() {
             receipt = await publicClient.getTransactionReceipt({ hash })
             if (receipt) break
           } catch {
-            // Transação ainda não confirmada, continua esperando
+            // Transaction not yet confirmed, continues waiting
           }
           attempts++
           if (attempts % 5 === 0) {
@@ -442,11 +470,11 @@ export default function Home() {
           await new Promise(resolve => setTimeout(resolve, pollingInterval))
         }
         
-        // Se não conseguiu o receipt, verifica diretamente o estado do contrato
+        // If receipt wasn't obtained, checks contract state directly
         if (!receipt) {
           addLog("⚠️ Could not get transaction receipt, checking contract state directly...")
           try {
-            // Aguarda um pouco mais antes de verificar
+            // Waits a bit more before checking
             await new Promise(resolve => setTimeout(resolve, 3000))
             
             const delegate = await getSessionDelegate(publicClient, burnerAccount.address)
@@ -474,7 +502,7 @@ export default function Home() {
         
         addLog(`✅ Transaction confirmed at block: ${receipt.blockNumber}`)
         
-        // Verifica o evento SessionKeyRegistered
+        // Checks SessionKeyRegistered event
         let eventFound = false
         if (receipt.logs) {
           const event = findEventInLogs(receipt.logs, "SessionKeyRegistered")
@@ -483,11 +511,11 @@ export default function Home() {
             eventFound = true
             addLog("✅ Session key registered successfully!")
             setIsSessionActive(true)
-            await checkAuthorization() // Atualiza o estado
+            await checkAuthorization() // Updates state
           }
         }
         
-        // Se o evento não foi encontrado, verifica diretamente no contrato
+        // If event wasn't found, checks contract directly
         if (!eventFound) {
           addLog("⚠️ Event not found in logs, checking contract state...")
           try {
@@ -502,7 +530,7 @@ export default function Home() {
           } catch (checkError) {
             addLog("⚠️ Could not verify session key status. Please check manually.")
             console.error('Error checking session key:', checkError)
-            // checkError é usado no console.error
+            // checkError is used in console.error
           }
         }
     } catch (e: unknown) { 
@@ -518,7 +546,7 @@ export default function Home() {
     }
   }
 
-  // B2. Revogar Sessão (Usa Main Wallet via Wagmi)
+  // B2. Revoke Session (Uses Main Wallet via Wagmi)
   const revokeSession = async () => {
     if (!burnerAccount || !address) return
     try {
@@ -532,7 +560,7 @@ export default function Home() {
         addLog(`Tx sent. Hash: ${hash.slice(0, 10)}...`)
         addLog("⏳ Waiting for confirmation...")
         
-        // Polling manual para verificar o status da transação
+        // Manual polling to check transaction status
         let receipt = null
         let attempts = 0
         const maxAttempts = 30 // 30 tentativas = ~30 segundos
@@ -543,7 +571,7 @@ export default function Home() {
             receipt = await publicClient.getTransactionReceipt({ hash })
             if (receipt) break
           } catch {
-            // Transação ainda não confirmada, continua esperando
+            // Transaction not yet confirmed, continues waiting
           }
           attempts++
           if (attempts % 5 === 0) {
@@ -552,11 +580,11 @@ export default function Home() {
           await new Promise(resolve => setTimeout(resolve, pollingInterval))
         }
         
-        // Se não conseguiu o receipt, verifica diretamente o estado do contrato
+        // If receipt wasn't obtained, checks contract state directly
         if (!receipt) {
           addLog("⚠️ Could not get transaction receipt, checking contract state directly...")
           try {
-            // Aguarda um pouco mais antes de verificar
+            // Waits a bit more before checking
             await new Promise(resolve => setTimeout(resolve, 3000))
             
             const delegate = await getSessionDelegate(publicClient, burnerAccount.address)
@@ -584,7 +612,7 @@ export default function Home() {
         
         addLog(`✅ Transaction confirmed at block: ${receipt.blockNumber}`)
         
-        // Verifica o evento SessionKeyRevoked
+        // Checks SessionKeyRevoked event
         let eventFound = false
         if (receipt.logs) {
           const event = findEventInLogs(receipt.logs, "SessionKeyRevoked")
@@ -593,11 +621,11 @@ export default function Home() {
             eventFound = true
             addLog("✅ Session key revoked successfully!")
             setIsSessionActive(false)
-            await checkAuthorization() // Atualiza o estado
+            await checkAuthorization() // Updates state
           }
         }
         
-        // Se o evento não foi encontrado, verifica diretamente no contrato
+        // If event wasn't found, checks contract directly
         if (!eventFound) {
           addLog("⚠️ Event not found in logs, checking contract state...")
           try {
@@ -612,7 +640,7 @@ export default function Home() {
           } catch (checkError) {
             addLog("⚠️ Could not verify session key status. Please check manually.")
             console.error('Error checking session key:', checkError)
-            // checkError é usado no console.error
+            // checkError is used in console.error
           }
         }
     } catch (e: unknown) { 
@@ -628,16 +656,16 @@ export default function Home() {
     }
   }
 
-        // C. Iniciar Jogo (Usa Main Wallet - Paga a aposta)
+        // C. Start Game (Uses Main Wallet - Pays the bet)
   const startGame = async () => {
-    // Valida o valor da aposta
+    // Validates bet amount
     const betValue = parseFloat(betAmount)
     if (isNaN(betValue) || betValue <= 0) {
       addLog("❌ Invalid bet amount!")
       return
     }
     
-    // Reseta o estado do jogo antes de iniciar
+    // Resets game state before starting
     setGame({
       id: null,
       pot: "0",
@@ -652,18 +680,18 @@ export default function Home() {
     setGridShake(false)
     setLostPot("0")
     
-    // 1. Gera nonce aleatório de 32 bytes usando crypto.getRandomValues
+    // 1. Generates random 32-byte nonce using crypto.getRandomValues
     addLog("🔐 Generating nonce...")
     const randomBytesArray = new Uint8Array(32)
     crypto.getRandomValues(randomBytesArray)
     const nonce = toHex(randomBytesArray) as Hex
     setCurrentNonce(nonce)
     
-    // 2. Cria hash do nonce usando keccak256
+    // 2. Creates nonce hash using keccak256
     const nonceCommit = keccak256(nonce)
     addLog(`   Nonce hash: ${nonceCommit.slice(0, 10)}...`)
     
-    // 3. Armazena nonce no localStorage junto com timestamp
+    // 3. Stores nonce in localStorage along with timestamp
     const gameData = {
       nonce: nonce,
       timestamp: Date.now()
@@ -673,37 +701,37 @@ export default function Home() {
     try {
         addLog("Starting game...")
         
-        // Reutiliza o cliente público do wagmi para evitar criar múltiplas instâncias
+        // Reuses wagmi public client to avoid creating multiple instances
         const publicClient = wagmiPublicClient || createPublicClient({
           chain: chain,
           transport: http()
         })
 
-        // 1. Obtém a taxa do Entropy (getFeeV2)
-        // Usa o endereço do Entropy diretamente da constante
+        // 1. Gets Entropy fee (getFeeV2)
+        // Uses Entropy address directly from constant
         addLog("💰 Getting Entropy fee...")
         const pythFee = await getEntropyFee(publicClient)
         addLog(`   Entropy fee: ${formatEther(pythFee)} MON`)
 
-        // 3. Calcula o valor total (taxa + aposta definida pelo usuário)
+        // 3. Calculates total value (fee + bet amount set by user)
         const betValue = parseEther(betAmount)
         const totalValue = pythFee + betValue
         addLog(`   Bet amount: ${betAmount} MON`)
         addLog(`   Total value: ${formatEther(totalValue)} MON`)
 
-        // 4. Chama startGame com nonceCommit
+        // 4. Calls startGame with nonceCommit
         addLog("🚀 Calling startGame with nonce commit...")
         const hash = await startGameContract(writeContractAsync, nonceCommit, totalValue)
         
-        addLog(`Tx enviada! Hash: ${hash.slice(0, 10)}...`)
+        addLog(`Tx sent! Hash: ${hash.slice(0, 10)}...`)
         setGame(prev => ({ ...prev, status: "waiting_pyth" }))
         
 
-        // 5. Aguarda confirmação da transação
+        // 5. Waits for transaction confirmation
         addLog("Waiting for confirmation...")
         const receipt = await publicClient.waitForTransactionReceipt({ hash })
         
-        // Verifica se a transação foi bem-sucedida
+        // Checks if transaction was successful
         if (receipt.status !== 'success') {
           addLog("❌ Transaction failed!")
           setGame(prev => ({ ...prev, status: "idle" }))
@@ -713,7 +741,7 @@ export default function Home() {
 
         addLog(`✅ Transaction confirmed at block: ${receipt.blockNumber}`)
 
-        // 6. Obtém o gameId do evento GameRequested
+        // 6. Gets gameId from GameRequested event
         let gameId: bigint | null = null
         if (receipt.logs) {
           const gameRequestedEvent = findEventInLogs(receipt.logs, "GameRequested")
@@ -725,7 +753,7 @@ export default function Home() {
               addLog(`🎯 Game ID: ${gameId}`)
               setGame(prev => ({ ...prev, id: gameId }))
               
-              // Armazena gameId e nonce no localStorage para recuperação
+              // Stores gameId and nonce in localStorage for recovery
               const gameData = {
                 gameId: gameId.toString(),
                 nonce: nonce,
@@ -743,10 +771,10 @@ export default function Home() {
           return
         }
 
-        // 7. Aguarda o evento GameStarted (seed do Pyth)
+        // 7. Waits for GameStarted event (Pyth seed)
         addLog("⏳ Waiting for GameStarted event (Pyth seed)...")
         
-        // Escuta o evento GameStarted
+        // Listens to GameStarted event
         let gameStartedReceived = false
         const unwatchGameStarted = publicClient.watchContractEvent({
           address: CONTRACT_ADDRESS,
@@ -771,7 +799,7 @@ export default function Home() {
           }
         })
         
-        // Fallback: também faz polling caso o evento não seja capturado
+        // Fallback: also does polling in case event isn't captured
         let attempts = 0
         const maxAttempts = 30
         let cancelled = false
@@ -798,7 +826,7 @@ export default function Home() {
             try {
               attempts++
               
-              // Verifica se o evento foi recebido
+              // Checks if event was received
               if (gameStartedReceived) {
                 cancelled = true
                 if (seedPollingRef.current) {
@@ -810,7 +838,7 @@ export default function Home() {
                 return
               }
               
-              // Fallback: verifica diretamente no contrato
+              // Fallback: checks contract directly
               const gameData = await getGameInfo(publicClient, gameId)
               
               const seed = gameData.seed
@@ -824,7 +852,7 @@ export default function Home() {
                   seedPollingRef.current = null
                 }
                 unwatchGameStarted()
-                addLog(`✅ Seed gerado: ${seed.slice(0, 10)}...`)
+                addLog(`✅ Seed generated: ${seed.slice(0, 10)}...`)
                 resolve()
               } else if (attempts >= maxAttempts) {
                 cancelled = true
@@ -841,7 +869,7 @@ export default function Home() {
                 addLog(`   Waiting for GameStarted... (${attempts}/${maxAttempts})`)
               }
             } catch (error) {
-              console.error('Erro ao verificar GameStarted:', error)
+              console.error('Error checking GameStarted:', error)
               if (attempts >= maxAttempts) {
                 cancelled = true
                 if (seedPollingRef.current) {
@@ -861,7 +889,7 @@ export default function Home() {
           return
         }
 
-        // 8. Atualiza o estado para aguardar primeiro movimento (revelação do nonce)
+        // 8. Updates state to wait for first move (nonce reveal)
         setGame(prev => ({ 
           ...prev, 
           status: "waiting_nonce",
@@ -874,16 +902,16 @@ export default function Home() {
         const error = e as { message?: string; cause?: unknown }
         const errorMessage: string = error.message || String(e)
         
-        // Limpa polling do seed se estiver ativo
+        // Clears seed polling if active
         if (seedPollingRef.current) {
           clearInterval(seedPollingRef.current)
           seedPollingRef.current = null
         }
         
-        // Limpa nonce em caso de erro
+        // Clears nonce on error
         setCurrentNonce(null)
         
-        // Reseta o estado do jogo apenas se necessário
+        // Resets game state only if necessary
         if (game.status !== "idle") {
           setGame(prev => ({ ...prev, status: "idle", nonceRevealed: false }))
         }
@@ -898,7 +926,7 @@ export default function Home() {
     }
   }
 
-  // Limpa watchers e intervals quando componente desmonta
+  // Clears watchers and intervals when component unmounts
   useEffect(() => {
     return () => {
       if (eventUnwatchRef.current) {
@@ -920,18 +948,18 @@ export default function Home() {
     }
   }, [])
 
-  // D. Jogar (Usa VIEM + BURNER WALLET)
+  // D. Play (Uses VIEM + BURNER WALLET)
   const handleCellClick = async (x: number, y: number) => {
     if (!game.id || !burnerClient.current) return
 
     try {
-        // Verifica se o nonce precisa ser revelado (primeiro movimento)
+        // Checks if nonce needs to be revealed (first move)
         let nonceToUse: Hex | undefined = undefined
         
         if (!game.nonceRevealed) {
-          // Primeiro movimento: precisa revelar o nonce
+          // First move: needs to reveal nonce
           if (!currentNonce) {
-            // Tenta recuperar do localStorage
+            // Tries to recover from localStorage
             const storedData = localStorage.getItem(`monad_game_${game.id.toString()}`)
             if (storedData) {
               try {
@@ -939,17 +967,17 @@ export default function Home() {
                 if (parsed.nonce) {
                   setCurrentNonce(parsed.nonce as Hex)
                   nonceToUse = parsed.nonce as Hex
-                  addLog("🔐 Nonce recuperado do localStorage")
+                  addLog("🔐 Nonce recovered from localStorage")
                 } else {
-                  addLog("❌ Nonce não encontrado! Não é possível fazer o primeiro movimento.")
+                  addLog("❌ Nonce not found! Cannot make first move.")
                   return
                 }
             } catch {
-              addLog("❌ Erro ao recuperar nonce do localStorage")
+              addLog("❌ Error recovering nonce from localStorage")
               return
             }
             } else {
-              addLog("❌ Nonce não encontrado! Não é possível fazer o primeiro movimento.")
+              addLog("❌ Nonce not found! Cannot make first move.")
               return
             }
           } else {
@@ -960,13 +988,13 @@ export default function Home() {
         
         addLog(`Opening (${x}, ${y})...`)
         
-        // Lê o estado do jogo ANTES de enviar a transação para ter o pote correto caso encontre mina
+        // Reads game state BEFORE sending transaction to have correct pot if mine is found
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const gameInfoBefore = await getGameInfo(burnerClient.current as any, game.id)
         const potBefore = gameInfoBefore.currentPot
         
-        // Escrita direta via Viem (Sem popup)
-        // Se for o primeiro movimento, inclui o nonce; caso contrário, envia bytes32 zero
+        // Direct write via Viem (No popup)
+        // If it's the first move, includes nonce; otherwise sends bytes32 zero
         const hash = await revealCellContract(
           burnerClient.current,
           game.id,
@@ -975,22 +1003,22 @@ export default function Home() {
           nonceToUse || ZERO_BYTES32
         )
         
-        // Espera recibo
+        // Waits for receipt
         const receipt = await burnerClient.current.waitForTransactionReceipt({ hash })
         
-        // Processa eventos: NonceRevealed e CellRevealed
+        // Processes events: NonceRevealed and CellRevealed
         if (receipt.logs) {
-          // Verifica se o nonce foi revelado (evento NonceRevealed)
+          // Checks if nonce was revealed (NonceRevealed event)
           const nonceRevealedEventFound = findEventInLogs(receipt.logs, "NonceRevealed")
           
           if (nonceRevealedEventFound && !game.nonceRevealed) {
-            addLog("✅ Nonce revelado com sucesso! Jogo agora está totalmente ativo.")
+            addLog("✅ Nonce revealed successfully! Game is now fully active.")
             setGame(prev => ({ ...prev, nonceRevealed: true, status: "playing" }))
-            // Limpa o nonce da memória após revelação bem-sucedida (mas mantém no localStorage para recuperação)
-            // Não limpa o currentNonce ainda, pode ser útil para debug
+            // Clears nonce from memory after successful reveal (but keeps in localStorage for recovery)
+            // Doesn't clear currentNonce yet, may be useful for debugging
           }
           
-          // Processa o evento CellRevealed
+          // Processes CellRevealed event
           const cellRevealedEventFound = findEventInLogs(receipt.logs, "CellRevealed")
           
           if (cellRevealedEventFound && cellRevealedEventFound.parsed) {
@@ -1000,13 +1028,13 @@ export default function Home() {
             const newPot = args.newPot
             
             if (isMine) {
-              // Usa o pote ANTES de encontrar a mina (o pote que foi perdido) apenas para mostrar no modal
+              // Uses pot BEFORE finding mine (the pot that was lost) only to show in modal
               const lostPotValue = formatEther(potBefore)
-              setLostPot(lostPotValue) // Salva o pote perdido para mostrar no modal
+              setLostPot(lostPotValue) // Saves lost pot to show in modal
               addLog(`💥 MINE FOUND at (${x}, ${y})!`)
               setMinePosition({ x, y })
               setGridShake(true)
-              // Mostra o modal após um pequeno delay para o efeito visual
+              // Shows modal after a small delay for visual effect
               setTimeout(() => {
                 setShowMineModal(true)
               }, 300)
@@ -1014,12 +1042,12 @@ export default function Home() {
                 ...prev, 
                 status: "game_over", 
                 isActive: false, 
-                pot: "0", // Reseta o pote para 0 quando perde
+                pot: "0", // Resets pot to 0 when losing
                 nonceRevealed: true
               }))
-              // Remove o shake após a animação
+              // Removes shake after animation
               setTimeout(() => setGridShake(false), 1000)
-              // Limpa dados do localStorage após game over
+              // Clears localStorage data after game over
               if (game.id) {
                 localStorage.removeItem(`monad_game_${game.id}`)
               }
@@ -1030,12 +1058,12 @@ export default function Home() {
           }
         }
         
-        // Lê o estado atualizado do jogo para sincronizar
+        // Reads updated game state to synchronize
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const gameInfo = await getGameInfo(burnerClient.current as any, game.id)
         const { currentPot: pot, revealedCells: revealedMask, isActive, isLost, nonceRevealed: nonceRevealedFromContract } = gameInfo
 
-        // Conta o número de células reveladas para calcular o multiplicador
+        // Counts number of revealed cells to calculate multiplier
         let revealedCount = 0
         for (let i = 0; i < 100; i++) {
           if ((revealedMask & (1n << BigInt(i))) !== 0n) {
@@ -1043,10 +1071,10 @@ export default function Home() {
           }
         }
         
-        // Atualiza o estado completo do jogo
+        // Updates complete game state
         setGame(prev => ({
           ...prev,
-          pot: prev.status === "game_over" ? "0" : formatEther(pot), // Mantém o pote em 0 se já foi game_over
+          pot: prev.status === "game_over" ? "0" : formatEther(pot), // Keeps pot at 0 if already game_over
           revealedMask: revealedMask,
           revealedCount: revealedCount,
           isActive: isActive && !isLost,
@@ -1063,39 +1091,39 @@ export default function Home() {
         } else if (errorMessage.includes("Celula ja revelada") || errorMessage.includes("célula já revelada") || errorMessage.includes("already revealed")) {
           addLog(`⚠️ Cell (${x}, ${y}) already revealed`)
         } else if (errorMessage.includes("Invalid nonce") || errorMessage.includes("nonce inválido") || errorMessage.includes("Nonce mismatch")) {
-          addLog("❌ Erro: Nonce inválido! Verifique se o nonce está correto.")
-          // Tenta recuperar do localStorage
+          addLog("❌ Error: Invalid nonce! Please verify the nonce is correct.")
+          // Tries to recover from localStorage
           const storedData = localStorage.getItem(`monad_game_${game.id.toString()}`)
           if (storedData) {
             try {
               const parsed = JSON.parse(storedData)
               if (parsed.nonce) {
                 setCurrentNonce(parsed.nonce as Hex)
-                addLog("🔐 Nonce recuperado do localStorage. Tente novamente.")
+                addLog("🔐 Nonce recovered from localStorage. Try again.")
               }
             } catch {
-              addLog("❌ Não foi possível recuperar o nonce do localStorage.")
+              addLog("❌ Could not recover nonce from localStorage.")
             }
           }
-        } else if (errorMessage.includes("Seed not available") || errorMessage.includes("seed não disponível")) {
-          addLog("⏳ Aguarde o seed do Pyth ser gerado antes de fazer movimentos.")
+        } else if (errorMessage.includes("Seed not available") || errorMessage.includes("seed não disponível") || errorMessage.includes("seed not available")) {
+          addLog("⏳ Wait for Pyth seed to be generated before making moves.")
         } else {
           addLog("Error: " + errorMessage)
         }
     }
   }
 
-  // E. Cashout (Usa VIEM + BURNER)
+  // E. Cashout (Uses VIEM + BURNER)
   const handleCashOut = async () => {
     if (!game.id || !burnerClient.current) return
     try {
         const hash = await cashOutContract(burnerClient.current, game.id)
-        addLog("Saque solicitado!")
+        addLog("Cashout requested!")
         await burnerClient.current.waitForTransactionReceipt({ hash })
         setGame(prev => ({ ...prev, status: "won", isActive: false }))
-        addLog("💰 Dinheiro na conta!")
+        addLog("💰 Money in account!")
         
-        // Limpa dados do localStorage após cashout
+        // Clears localStorage data after cashout
         localStorage.removeItem(`monad_game_${game.id.toString()}`)
         setCurrentNonce(null)
     } catch (e: unknown) { 
@@ -1104,14 +1132,14 @@ export default function Home() {
     }
   }
 
-  // --- RENDER (Simplificado para brevidade) ---
+  // --- RENDER (Simplified for brevity) ---
   const renderGrid = () => {
     const cells = []
     for (let y = 0; y < 10; y++) {
       for (let x = 0; x < 10; x++) {
         const index = BigInt(y * 10 + x)
         const isMineCell = minePosition && minePosition.x === x && minePosition.y === y
-        // Se for uma célula de mina, não verifica revealedMask - sempre mostra como mina
+        // If it's a mine cell, doesn't check revealedMask - always shows as mine
         const isRevealed = !isMineCell && (game.revealedMask & (1n << index)) !== 0n
         
         let cellClass = 'bg-gradient-to-br from-gray-700 to-gray-800 border-gray-600 hover:from-gray-600 hover:to-gray-700'
@@ -1184,7 +1212,7 @@ export default function Home() {
                   onClick={() => connect({ connector: connectors[0] })} 
                   className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 px-8 py-4 rounded-xl font-bold text-lg transition-all transform hover:scale-105 shadow-lg shadow-purple-500/50"
                 >
-                  🔗 Conectar Wallet
+                  🔗 Connect Wallet
                 </button>
               </div>
             </div>
@@ -1364,14 +1392,14 @@ export default function Home() {
                           {game.status === 'waiting_pyth' ? (
                             <div className="py-12 flex flex-col items-center gap-3">
                               <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-purple-500"></div>
-                              <p className="text-lg text-purple-300 font-semibold animate-pulse">Aguardando seed do Pyth...</p>
+                              <p className="text-lg text-purple-300 font-semibold animate-pulse">Waiting for Pyth seed...</p>
                             </div>
                           ) : (
                             <>
                               {game.status === 'waiting_nonce' && (
                                 <div className="mb-4 text-center w-full">
                                   <div className="animate-pulse text-2xl mb-2">🔐</div>
-                                  <p className="text-sm text-yellow-300 font-semibold">Jogo pronto! Clique em qualquer célula para revelar o nonce.</p>
+                                  <p className="text-sm text-yellow-300 font-semibold">Game ready! Click on any cell to reveal the nonce.</p>
                                 </div>
                               )}
                               <div className="flex justify-center w-full">
@@ -1386,7 +1414,7 @@ export default function Home() {
           )}
         </div>
 
-        {/* Modal de Abastecimento */}
+        {/* Top Up Modal */}
         {showTopUpModal && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 animate-fadeIn">
             <div className="bg-gradient-to-br from-gray-800/95 to-gray-900/95 backdrop-blur-md border-2 border-purple-500/50 rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl animate-bounceIn">
@@ -1436,7 +1464,7 @@ export default function Home() {
                     onClick={() => setTopUpAmount(mainBalance)}
                     className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 px-3 py-2 rounded-lg text-sm font-semibold transition-all transform hover:scale-105"
                   >
-                    Máx
+                    Max
                   </button>
                 </div>
               </div>
@@ -1459,7 +1487,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* Modal de Withdraw */}
+        {/* Withdraw Modal */}
         {showWithdrawModal && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 animate-fadeIn">
             <div className="bg-gradient-to-br from-gray-800/95 to-gray-900/95 backdrop-blur-md border-2 border-green-500/50 rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl animate-bounceIn">
@@ -1547,6 +1575,17 @@ export default function Home() {
                 </div>
               )}
 
+              {withdrawError && (
+                <div className="mb-4 bg-gradient-to-r from-red-500/10 to-red-600/10 border border-red-500/30 rounded-xl p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="text-red-400 text-xl">⚠️</span>
+                    <div className="flex-1">
+                      <p className="text-red-400 font-semibold text-sm">{withdrawError}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-3">
                 <button
                   onClick={handleWithdraw}
@@ -1567,6 +1606,7 @@ export default function Home() {
                     if (!isWithdrawing) {
                       setShowWithdrawModal(false)
                       setIsWithdrawing(false)
+                      setWithdrawError(null) // Clears error on cancel
                     }
                   }}
                   disabled={isWithdrawing}
@@ -1579,7 +1619,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* Modal How to Play */}
+        {/* How to Play Modal */}
         {showHowToPlayModal && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 animate-fadeIn">
             <div className="bg-gradient-to-br from-gray-800/95 to-gray-900/95 backdrop-blur-md border-2 border-purple-500/50 rounded-2xl p-6 max-w-2xl w-full mx-4 shadow-2xl animate-bounceIn max-h-[90vh] overflow-y-auto">
@@ -1653,11 +1693,11 @@ export default function Home() {
           </div>
         )}
 
-        {/* Modal de Explosão - Mina Encontrada */}
+        {/* Explosion Modal - Mine Found */}
         {showMineModal && (
           <div className="fixed inset-0 bg-black bg-opacity-95 flex items-center justify-center z-50 animate-fadeIn">
             <div className="relative bg-gradient-to-br from-red-900 via-red-800 to-orange-900 border-4 border-red-500 rounded-lg p-8 max-w-md w-full mx-4 text-center animate-bounceIn shadow-2xl shadow-red-900">
-              {/* Efeito de brilho pulsante ao redor */}
+              {/* Pulsating glow effect around */}
               <div className="absolute inset-0 rounded-lg bg-red-500 opacity-20 animate-pulse blur-xl"></div>
               
               <div className="relative mb-6">

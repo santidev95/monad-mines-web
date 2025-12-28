@@ -1,16 +1,16 @@
 // utils/contract.ts
-// Módulo para interações com o contrato MonadMines
+// Module for interactions with MonadMines contract
 
 import { type Address, type PublicClient, type Hex, decodeEventLog } from 'viem'
 import { CONTRACT_ADDRESS, CONTRACT_ABI, ENTROPY_ADDRESS, ENTROPY_ABI } from './constants'
 
-// Exporta também para uso em watchContractEvent
+// Also exports for use in watchContractEvent
 export { CONTRACT_ADDRESS, CONTRACT_ABI }
 
 
-// Tipos do contrato
-// games retorna: [player, currentPot, seed, pythSeed, playerNonce, nonceCommit, revealedCells, isActive, isLost, nonceRevealed]
-// Nota: revealedCells é um bigint que representa um bitmask (cada bit representa uma célula revelada)
+// Contract types
+// games returns: [player, currentPot, seed, pythSeed, playerNonce, nonceCommit, revealedCells, isActive, isLost, nonceRevealed]
+// Note: revealedCells is a bigint that represents a bitmask (each bit represents a revealed cell)
 export type GameInfoArray = [string, bigint, Hex, Hex, Hex, Hex, bigint, boolean, boolean, boolean]
 export type GameInfo = {
   player: string
@@ -19,16 +19,16 @@ export type GameInfo = {
   pythSeed: Hex
   playerNonce: Hex
   nonceCommit: Hex
-  revealedCells: bigint // Bitmask das células reveladas
+  revealedCells: bigint // Bitmask of revealed cells
   isActive: boolean
   isLost: boolean
   nonceRevealed: boolean
 }
 
-// ============ FUNÇÕES DE LEITURA ============
+// ============ READ FUNCTIONS ============
 
 /**
- * Verifica se uma session key está registrada para um usuário
+ * Checks if a session key is registered for a user
  */
 export async function getSessionDelegate(
   publicClient: PublicClient,
@@ -44,7 +44,7 @@ export async function getSessionDelegate(
 }
 
 /**
- * Obtém informações de um jogo
+ * Gets game information
  */
 export async function getGameInfo(
   publicClient: PublicClient,
@@ -72,7 +72,7 @@ export async function getGameInfo(
 }
 
 /**
- * Obtém a taxa do Entropy
+ * Gets Entropy fee
  */
 export async function getEntropyFee(publicClient: PublicClient): Promise<bigint> {
   const result = await publicClient.readContract({
@@ -83,10 +83,10 @@ export async function getEntropyFee(publicClient: PublicClient): Promise<bigint>
   return result as bigint
 }
 
-// ============ FUNÇÕES DE ESCRITA (Main Wallet) ============
+// ============ WRITE FUNCTIONS (Main Wallet) ============
 
 /**
- * Registra uma session key
+ * Registers a session key
  */
 export async function registerSessionKey(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -102,7 +102,7 @@ export async function registerSessionKey(
 }
 
 /**
- * Revoga uma session key
+ * Revokes a session key
  */
 export async function revokeSessionKey(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -118,7 +118,7 @@ export async function revokeSessionKey(
 }
 
 /**
- * Inicia um novo jogo
+ * Starts a new game
  */
 export async function startGame(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -135,15 +135,15 @@ export async function startGame(
   })
 }
 
-// ============ FUNÇÕES DE ESCRITA (Burner Wallet) ============
+// ============ WRITE FUNCTIONS (Burner Wallet) ============
 
 /**
- * Revela uma célula no jogo
- * @param walletClient - Cliente wallet (burner wallet)
- * @param gameId - ID do jogo
- * @param x - Coordenada X da célula
- * @param y - Coordenada Y da célula
- * @param nonce - Nonce para revelar (use zeroBytes32 se não for o primeiro movimento)
+ * Reveals a cell in the game
+ * @param walletClient - Wallet client (burner wallet)
+ * @param gameId - Game ID
+ * @param x - Cell X coordinate
+ * @param y - Cell Y coordinate
+ * @param nonce - Nonce to reveal (use zeroBytes32 if not the first move)
  */
 export async function revealCell(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -163,12 +163,12 @@ export async function revealCell(
 }
 
 /**
- * Bytes32 zero para usar quando não é necessário revelar nonce
+ * Zero bytes32 to use when nonce reveal is not needed
  */
 export const ZERO_BYTES32 = "0x0000000000000000000000000000000000000000000000000000000000000000" as Hex
 
 /**
- * Faz cashout de um jogo
+ * Cashes out a game
  */
 export async function cashOut(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -183,10 +183,10 @@ export async function cashOut(
   })
 }
 
-// ============ DECODIFICAÇÃO DE EVENTOS ============
+// ============ EVENT DECODING ============
 
 /**
- * Decodifica evento de log
+ * Decodes log event
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function decodeContractEvent(log: { data: Hex; topics: Hex[] }, eventName: string): any {
@@ -204,7 +204,7 @@ export function decodeContractEvent(log: { data: Hex; topics: Hex[] }, eventName
 }
 
 /**
- * Encontra um evento específico nos logs e retorna o log raw junto com o parsed
+ * Finds a specific event in logs and returns the raw log along with parsed
  */
 export function findEventInLogs(
   logs: Array<{ data: Hex; topics: Hex[] }>,
@@ -221,7 +221,7 @@ export function findEventInLogs(
 }
 
 /**
- * Tipos de eventos
+ * Event types
  */
 export type GameRequestedEvent = {
   eventName: 'GameRequested'

@@ -1,0 +1,828 @@
+[
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_entropy",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "owner",
+        "type": "address"
+      }
+    ],
+    "name": "OwnableInvalidOwner",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "OwnableUnauthorizedAccount",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ReentrancyGuardReentrantCall",
+    "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint64",
+        "name": "gameId",
+        "type": "uint64"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "x",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "y",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "isMine",
+        "type": "bool"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "newPot",
+        "type": "uint256"
+      }
+    ],
+    "name": "CellRevealed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint64",
+        "name": "gameId",
+        "type": "uint64"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "finalPayout",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "isWin",
+        "type": "bool"
+      }
+    ],
+    "name": "GameOver",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint64",
+        "name": "gameId",
+        "type": "uint64"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "nonceCommit",
+        "type": "bytes32"
+      }
+    ],
+    "name": "GameRequested",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint64",
+        "name": "gameId",
+        "type": "uint64"
+      }
+    ],
+    "name": "GameStarted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint64",
+        "name": "gameId",
+        "type": "uint64"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "playerNonce",
+        "type": "bytes32"
+      }
+    ],
+    "name": "NonceRevealed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "previousOwner",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "OwnershipTransferred",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "parameter",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "newValue",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "executeTime",
+        "type": "uint256"
+      }
+    ],
+    "name": "ParameterChangeProposed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "parameter",
+        "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "newValue",
+        "type": "uint256"
+      }
+    ],
+    "name": "ParameterChanged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "sessionKey",
+        "type": "address"
+      }
+    ],
+    "name": "SessionKeyRegistered",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "sessionKey",
+        "type": "address"
+      }
+    ],
+    "name": "SessionKeyRevoked",
+    "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "BASE_DIVISOR",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MAX_MINE_PROBABILITY",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MAX_REWARD_MULTIPLIER",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MINE_PROBABILITY",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MIN_MINE_PROBABILITY",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MIN_REWARD_MULTIPLIER",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "PARAM_CHANGE_DELAY",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "REWARD_MULTIPLIER",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint64",
+        "name": "sequence",
+        "type": "uint64"
+      },
+      {
+        "internalType": "address",
+        "name": "provider",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "randomNumber",
+        "type": "bytes32"
+      }
+    ],
+    "name": "_entropyCallback",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bool",
+        "name": "isProbabilityChange",
+        "type": "bool"
+      }
+    ],
+    "name": "cancelPendingChange",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint64",
+        "name": "gameId",
+        "type": "uint64"
+      }
+    ],
+    "name": "cashOut",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "entropy",
+    "outputs": [
+      {
+        "internalType": "contract IEntropyV2",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "executeMineProbabilityChange",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "executeRewardMultiplierChange",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "name": "games",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "currentPot",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "seed",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "pythSeed",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "playerNonce",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "nonceCommit",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "revealedCells",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "isActive",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "isLost",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "nonceRevealed",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint64",
+        "name": "gameId",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint8",
+        "name": "x",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "y",
+        "type": "uint8"
+      }
+    ],
+    "name": "getCellStatus",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "isRevealed",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "isSafe",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint64",
+        "name": "gameId",
+        "type": "uint64"
+      }
+    ],
+    "name": "getGameState",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "player",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "currentPot",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "seed",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bool",
+        "name": "isActive",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "isLost",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint256",
+        "name": "revealedCells",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "nonceRevealed",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint64",
+        "name": "gameId",
+        "type": "uint64"
+      }
+    ],
+    "name": "getRevealedSafeCells",
+    "outputs": [
+      {
+        "internalType": "uint8[]",
+        "name": "",
+        "type": "uint8[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "owner",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "pendingMineProbability",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "newValue",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "changeTime",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "pendingRewardMultiplier",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "newValue",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "changeTime",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_newProbability",
+        "type": "uint256"
+      }
+    ],
+    "name": "proposeMineProbabilityChange",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_newMultiplier",
+        "type": "uint256"
+      }
+    ],
+    "name": "proposeRewardMultiplierChange",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_sessionKey",
+        "type": "address"
+      }
+    ],
+    "name": "registerSessionKey",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "renounceOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint64",
+        "name": "gameId",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint8",
+        "name": "x",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "y",
+        "type": "uint8"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "nonce",
+        "type": "bytes32"
+      }
+    ],
+    "name": "revealCell",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint64",
+        "name": "gameId",
+        "type": "uint64"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "nonce",
+        "type": "bytes32"
+      }
+    ],
+    "name": "revealNonce",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_sessionKey",
+        "type": "address"
+      }
+    ],
+    "name": "revokeSessionKey",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "sessionDelegates",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "nonceCommit",
+        "type": "bytes32"
+      }
+    ],
+    "name": "startGame",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "transferOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "withdrawHouseFunds",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "stateMutability": "payable",
+    "type": "receive"
+  }
+]
